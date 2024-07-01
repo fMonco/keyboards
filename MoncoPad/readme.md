@@ -27,5 +27,7 @@ Enter the bootloader in 3 ways:
 * **Keycode in layout**: Press the key mapped to `QK_BOOT` if it is available
 
 Used tutors:
+
 https://www.youtube.com/watch?v=hjml-K-pV4E
+
 https://www.youtube.com/watch?v=v9r5DKZLz68
