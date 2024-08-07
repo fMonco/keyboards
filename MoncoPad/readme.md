@@ -28,6 +28,8 @@ Enter the bootloader in 3 ways:
 
 Used tutors:
 
+https://github.com/joe-scotto/scottokeebs/tree/main/Scotto9
+
 https://www.youtube.com/watch?v=hjml-K-pV4E
 
 https://www.youtube.com/watch?v=v9r5DKZLz68
