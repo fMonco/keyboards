@@ -1,0 +1,16 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Micropad: Serial Monitor (auto reconnect)",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+        "${workspaceFolder}/tools/monitor.ps1", "-Port", "COM3"
+      ],
+      "presentation": {"reveal": "always", "panel": "dedicated", "clear": false},
+      "problemMatcher": []
+    }
+  ]
+}
