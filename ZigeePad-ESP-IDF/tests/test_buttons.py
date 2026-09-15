@@ -35,6 +35,18 @@ class ButtonsTest(unittest.TestCase):
     def test_double_no_single(self):
         self.assertEqual(simulate([(100, 200), (300, 400)]), ([2], False))
 
+    def test_two_doubles_same_key(self):
+        for gap in (30, 100, 300, 600, 1200):
+            with self.subTest(gap=gap):
+                start = 400 + gap
+                self.assertEqual(simulate([(100, 200), (300, 400),
+                                           (start, start + 100), (start + 200, start + 300)],
+                                          duration=start + 1000), ([2, 2], False))
+
+    def test_repeated_doubles_same_key(self):
+        intervals = [(100 + i * 200, 200 + i * 200) for i in range(20)]
+        self.assertEqual(simulate(intervals, duration=5000), ([2] * 10, False))
+
     def test_hold_once_no_release_event(self):
         self.assertEqual(simulate([(100, 1600)]), ([3], False))
 
@@ -45,10 +57,10 @@ class ButtonsTest(unittest.TestCase):
         self.assertEqual(simulate([(100, 110), (120, 130)]), ([], False))
 
     def test_double_boundary_includes_debounce(self):
-        self.assertEqual(simulate([(100, 200), (550, 650)]), ([2], False))
+        self.assertEqual(simulate([(100, 200), (700, 800)]), ([2], False))
 
     def test_late_second_is_two_singles(self):
-        self.assertEqual(simulate([(100, 200), (555, 650)]), ([1, 1], False))
+        self.assertEqual(simulate([(100, 200), (705, 800)]), ([1, 1], False))
 
     def test_tap_then_hold(self):
         self.assertEqual(simulate([(100, 200), (300, 1200)]), ([1, 3], False))

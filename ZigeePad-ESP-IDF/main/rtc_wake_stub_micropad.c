@@ -2,6 +2,7 @@
  * No GPIO driver, flash data, heap, or FreeRTOS may be used here. */
 #include "esp_sleep.h"
 #include "esp_rom_sys.h"
+#include "esp_cpu.h"
 #include "hal/gpio_ll.h"
 #include "hal/rtc_io_ll.h"
 #include "soc/gpio_sig_map.h"
@@ -10,7 +11,7 @@
 #include "board_pins.h"
 #include "matrix_scan.h"
 
-uint16_t wake_pressed;
+wake_gesture_t wake_capture;
 /* This file's constants are linked into RTC memory too. */
 static const uint8_t wake_cols[] = MATRIX_COL_GPIOS;
 static const uint8_t wake_rows[] = {GPIO_NUM_0, GPIO_NUM_1, GPIO_NUM_2};
@@ -31,16 +32,16 @@ static uint8_t read_low_rows(void)
     return low;
 }
 
-static uint16_t scan(void)
+static matrix_sample_t scan(void)
 {
     const matrix_io_t io = {release_all, select_column, read_low_rows, esp_rom_delay_us};
-    return matrix_scan_cycle(&io).keys;
+    return matrix_scan_cycle(&io);
 }
 
 void micropad_wake_stub(void)
 {
-    /* Запускается раньше загрузчика: запоминает первую кнопку в wake_pressed.
-     * app_main() заберёт её даже если пользователь уже отпустил кнопку.
+    /* Запускается раньше загрузчика: распознаёт первый жест в RTC RAM.
+     * app_main() заберёт событие и состояние кнопок после загрузки.
      * Здесь нельзя вызывать обычные драйверы, FreeRTOS и обращаться к flash. */
     esp_default_wake_deep_sleep();
     /* C6 hold bits correspond directly to GPIO numbers. Do not use the
@@ -67,13 +68,13 @@ void micropad_wake_stub(void)
         gpio_ll_pullup_en(&GPIO, c);
         gpio_ll_pulldown_dis(&GPIO, c);
     }
-    /* Retain only keys stable for 25 ms. This captures a released wake key
-     * before the bootloader and Zigbee initialization can hide it. */
-    uint16_t stable = scan();
-    // 5 пауз по 5000 мкс = 25 мс плюс время сканирования; настройка независима от buttons.h.
-    for (unsigned i = 0; i < 5 && stable; i++) {
-        esp_rom_delay_us(5000);
-        stable &= scan();
+    // enter_sleep() clears the capture before installing this stub.
+    uint32_t started = esp_cpu_get_cycle_count();
+    uint32_t ticks_per_ms = esp_rom_get_cpu_ticks_per_us() * 1000U;
+    for (;;) {
+        matrix_sample_t sample = scan();
+        uint32_t now = (uint32_t)(esp_cpu_get_cycle_count() - started) / ticks_per_ms;
+        if (wake_gesture_step(&wake_capture, sample.keys, sample.invalid_rows, now)) break;
+        esp_rom_delay_us(4000);
     }
-    wake_pressed = stable;
 }

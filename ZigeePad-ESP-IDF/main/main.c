@@ -31,7 +31,7 @@
 #define VALUE_ATTR EZB_ZCL_ATTR_MULTISTATE_INPUT_PRESENT_VALUE_ID
 /* Все интервалы ниже — миллисекунды. Это условия разрешения сна,
  * а не фиксированное время работы: передача и удерживаемая кнопка продляют его. */
-#define IDLE_MS 500U                 // Пауза после завершения жеста/активности.
+#define IDLE_MS 2000U                 // Пауза после завершения жеста/активности.
 #define SETUP_AWAKE_MS 20000U        // Окно настройки после подключения при RESET/первом join.
 #define RECONNECT_WINDOW_MS 25000U  // Нет сети после пробуждения клавишей: ждём до 25 с.
 #define READY_SETTLE_MS 1000U        // Минимум 1 с после восстановления Zigbee при key wake.
@@ -181,7 +181,7 @@ static bool enter_sleep(void)
                                                     (1ULL << GPIO_NUM_1) |
                                                     (1ULL << GPIO_NUM_2),
                                                     ESP_EXT1_WAKEUP_ANY_LOW));
-    wake_pressed = 0;
+    memset(&wake_capture, 0, sizeof(wake_capture));
     esp_set_deep_sleep_wake_stub(micropad_wake_stub);
     ESP_LOGI(TAG, "STATE: ENTERING DEEP SLEEP | queued=%u | wake: KEY ONLY (timer OFF) | previous cause=0x%lx EXT1 rows=0x%llx",
              pending.count, (unsigned long)esp_sleep_get_wakeup_causes(),
@@ -368,17 +368,25 @@ void app_main(void)
     uint32_t network_window = key_wake ? RECONNECT_WINDOW_MS : JOIN_WINDOW_MS;
     const char *wake_reason = (wake_causes & BIT(ESP_SLEEP_WAKEUP_EXT1)) ? "KEY" :
                               (wake_causes & BIT(ESP_SLEEP_WAKEUP_TIMER)) ? "TIMER" : "POWER/RESET";
-    ESP_LOGI(TAG, "STATE: AWAKE | wake reason: %s | captured keys=0x%03x", wake_reason, wake_pressed);
-    ESP_LOGI(TAG, "BATTERY MODE: no timer wake; idle=500ms; wait for TX confirmation");
+    ESP_LOGI(TAG, "STATE: AWAKE | wake reason: %s | captured events=%u", wake_reason,
+             key_wake && wake_capture.valid ? wake_capture.count : 0);
+    ESP_LOGI(TAG, "BATTERY MODE: no timer wake; idle=%ums; wait for TX confirmation", (unsigned)IDLE_MS);
     for (unsigned i = 0; i < 9; i++) {
         buttons[i].raw = (first >> i) & 1;
         buttons[i].changed_at = start;
-        if ((esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_EXT1)) && (wake_pressed & (1U << i))) {
-            buttons[i].down = true;
-            buttons[i].pressed_at = start;
+    }
+    if (key_wake && wake_capture.valid) {
+        wake_gesture_restore(&wake_capture, buttons, start);
+        for (unsigned i = 0; i < wake_capture.count; i++) {
+            uint16_t value = wake_capture.events[i];
+            ESP_LOGI(TAG, "Wake gesture captured => %u", value);
+            if (pending.count < QUEUE_SIZE) {
+                pending.values[(pending.head + pending.count) % QUEUE_SIZE] = value;
+                pending.count++;
+            } else ESP_LOGE(TAG, "Event queue full; wake event %u dropped", value);
         }
     }
-    wake_pressed = 0;
+    memset(&wake_capture, 0, sizeof(wake_capture));
     /* XIAO internal antenna; active-low user LED off. */
     gpio_set_direction(GPIO_NUM_3, GPIO_MODE_OUTPUT);
     gpio_set_level(GPIO_NUM_3, 0);
@@ -465,8 +473,8 @@ void app_main(void)
                 ESP_LOGE(TAG, "MATRIX: LOW with all columns released; rows=0x%x (bit0=D0 bit1=D1 bit2=D2); events suppressed",
                          matrix_invalid_rows);
             }
-            ESP_LOGI(TAG, "STATE: AWAKE | Zigbee=%s | idle=%lums/500ms | keys=0x%03x | queued=%u | TX=%s",
-                     ready ? "CONNECTED" : "SEARCHING", (unsigned long)(now - activity),
+            ESP_LOGI(TAG, "STATE: AWAKE | Zigbee=%s | idle=%lums/%ums | keys=0x%03x | queued=%u | TX=%s",
+                     ready ? "CONNECTED" : "SEARCHING", (unsigned long)(now - activity), (unsigned)IDLE_MS,
                      raw, pending.count, in_flight ? "WAIT_CONFIRM" : "IDLE");
             if (!ready) {
                 uint32_t left = now - start < network_window ? network_window - (now - start) : 0;
@@ -520,7 +528,7 @@ void app_main(void)
             }
             /* Главные условия сна (проверяются вместе):
              * 1) Нет незавершённого жеста, ошибки матрицы, BOOT и ожидаемого TX;
-             *    прошло 500 мс без активности.
+             *    прошло IDLE_MS без активности.
              * 2) Сеть готова, очередь пуста (или 3 попытки исчерпаны), истекли
              *    окно 1/20 с после READY и пауза 250 мс после TX;
              *    ИЛИ сеть недоступна и закончились 25/120 с на подключение.

@@ -3,7 +3,7 @@
 #include <stdint.h>
 /* Настройки жестов, все значения в миллисекундах. */
 #define BUTTON_DEBOUNCE_MS 25  // Уровень должен быть стабильным, чтобы принять изменение.
-#define BUTTON_DOUBLE_MS 350  // От отпускания первого до начала второго нажатия.
+#define BUTTON_DOUBLE_MS 500  // От отпускания первого до начала второго нажатия.
 #define BUTTON_HOLD_MS 700    // Hold один раз после удержания; отпускание не даёт single.
 typedef enum { BUTTON_NONE, BUTTON_SINGLE, BUTTON_DOUBLE, BUTTON_HOLD } button_action_t;
 typedef struct {
